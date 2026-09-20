@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Teste de áudio — Treino de Pronúncia</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#14161a; --mut:#5b6472; --line:#d9dee6; --card:#f4f6f9; --ac:#1f4fd8; --ok:#0f7a4a; --er:#b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#101319; --fg:#eef1f6; --mut:#9aa4b4; --line:#2a303a; --card:#181d26; --ac:#7ea2ff; --ok:#5fd39b; --er:#ff9a92; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  h1 { font-size:1.15rem; margin:0 0 4px; }
+  p.sub { color:var(--mut); margin:0 0 20px; font-size:.9rem; }
+  section { border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; background:var(--card); }
+  h2 { font-size:.95rem; margin:0 0 10px; }
+  button { min-height:48px; min-width:48px; padding:0 16px; font:inherit; font-weight:600; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; margin:0 8px 8px 0; }
+  button.primary { background:var(--ac); border-color:var(--ac); color:#fff; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button:focus-visible { outline:3px solid var(--ac); outline-offset:2px; }
+  select, input[type=range] { width:100%; min-height:48px; font:inherit; margin-bottom:10px; }
+  .log { font:13px/1.45 ui-monospace,Menlo,Consolas,monospace; white-space:pre-wrap; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; max-height:240px; overflow:auto; }
+  .ok { color:var(--ok); font-weight:600; } .er { color:var(--er); font-weight:600; }
+  .pill { display:inline-block; font-size:.8rem; padding:2px 8px; border-radius:999px; border:1px solid var(--line); margin-right:6px; }
+</style>
+</head>
+<body>
+<h1>Teste de áudio</h1>
+<p class="sub">Página de diagnóstico. Abra no Chrome do Android antes de usar o app. Se tudo aqui funciona, o app funciona.</p>
+
+<section>
+  <h2>1. Vozes do aparelho</h2>
+  <div id="vozStatus" class="pill">carregando…</div>
+  <select id="vozSel" aria-label="Voz"><option>aguardando vozes…</option></select>
+  <button id="bFalar" class="primary" disabled>Ouvir "Advisory"</button>
+  <button id="bLento" disabled>Devagar (0.6)</button>
+  <button id="bFrase" disabled>Frase longa (teste de travamento)</button>
+</section>
+
+<section>
+  <h2>2. Gravação do microfone</h2>
+  <button id="bGravar">Gravar 5 s</button>
+  <button id="bTocar" disabled>Tocar gravação</button>
+  <button id="bAB" disabled>Comparar A/B</button>
+  <div id="micStatus" class="pill">microfone não solicitado</div>
+</section>
+
+<section>
+  <h2>3. Reconhecimento de fala</h2>
+  <div id="netStatus" class="pill"></div>
+  <button id="bOuvirMe">Conferir: fale "Advisory"</button>
+  <div id="recOut" class="pill" style="display:none"></div>
+</section>
+
+<section>
+  <h2>Registro</h2>
+  <div id="log" class="log"></div>
+</section>
+
+<script>
+(function () {
+  'use strict';
+  var logEl = document.getElementById('log');
+  function log(msg, cls) {
+    var t = new Date().toLocaleTimeString('pt-BR');
+    var line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = '[' + t + '] ' + msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  /* ---------- 1. Síntese de voz ---------- */
+  var synth = window.speechSynthesis;
+  var vozes = [], escolhida = null, keepAlive = null, tentativas = 0;
+  var vozSel = document.getElementById('vozSel');
+  var vozStatus = document.getElementById('vozStatus');
+  var botoesFala = [document.getElementById('bFalar'), document.getElementById('bLento'), document.getElementById('bFrase')];
+
+  if (!synth) {
+    vozStatus.textContent = 'speechSynthesis não existe neste navegador';
+    vozStatus.className = 'pill er';
+    log('speechSynthesis indisponível', 'er');
+  }
+
+  function carregarVozes() {
+    var lista = synth ? synth.getVoices() : [];
+    if (!lista.length) {
+      tentativas++;
+      if (tentativas < 24) { setTimeout(carregarVozes, 250); }
+      else {
+        vozStatus.textContent = 'nenhuma voz encontrada';
+        vozStatus.className = 'pill er';
+        log('getVoices() voltou vazio após 6 s. No Android: Configurações > Sistema > Idiomas e entrada > Saída de texto para voz > Google Fala > engrenagem > Instalar dados de voz > Inglês dos Estados Unidos.', 'er');
+      }
+      return;
+    }
+    vozes = lista.filter(function (v) { return /^en/i.test(v.lang); });
+    log('getVoices(): ' + lista.length + ' vozes no total, ' + vozes.length + ' em inglês (tentativa ' + (tentativas + 1) + ')');
+    if (!vozes.length) {
+      vozStatus.textContent = 'sem voz em inglês';
+      vozStatus.className = 'pill er';
+      log('Há vozes, mas nenhuma em inglês. Instale os dados de voz de Inglês dos Estados Unidos.', 'er');
+      return;
+    }
+    escolhida = melhorVoz(vozes);
+    vozSel.innerHTML = '';
+    vozes.forEach(function (v, i) {
+      var o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = v.name + ' — ' + v.lang + (v.localService ? ' (offline)' : ' (rede)');
+      if (v === escolhida) o.selected = true;
+      vozSel.appendChild(o);
+    });
+    vozSel.onchange = function () { escolhida = vozes[Number(vozSel.value)]; log('Voz trocada para: ' + escolhida.name); };
+    vozStatus.textContent = escolhida.lang.toLowerCase().indexOf('en-us') === 0 ? 'voz en-US pronta' : 'usando ' + escolhida.lang;
+    vozStatus.className = 'pill ok';
+    botoesFala.forEach(function (b) { b.disabled = false; });
+    log('Voz escolhida: ' + escolhida.name + ' (' + escolhida.lang + ')', 'ok');
+  }
+
+  function melhorVoz(lista) {
+    var us = lista.filter(function (v) { return /^en[-_]us/i.test(v.lang); });
+    var pool = us.length ? us : lista;
+    var google = pool.filter(function (v) { return /google/i.test(v.name); });
+    return (google[0] || pool[0]);
+  }
+
+  function falar(texto, rate) {
+    if (!synth || !escolhida) return;
+    synth.cancel();
+    setTimeout(function () {
+      var u = new SpeechSynthesisUtterance(texto);
+      u.voice = escolhida; u.lang = escolhida.lang; u.rate = rate; u.pitch = 1; u.volume = 1;
+      u.onstart = function () {
+        log('falando (' + rate + 'x): "' + texto + '"');
+        clearInterval(keepAlive);
+        keepAlive = setInterval(function () {
+          if (!synth.speaking) { clearInterval(keepAlive); return; }
+          synth.pause(); synth.resume();
+        }, 5000);
+      };
+      u.onend = function () { clearInterval(keepAlive); log('fim da fala', 'ok'); };
+      u.onerror = function (e) { clearInterval(keepAlive); log('erro na fala: ' + (e.error || '?'), 'er'); };
+      synth.speak(u);
+    }, 60);
+  }
+
+  if (synth && synth.addEventListener) synth.addEventListener('voiceschanged', carregarVozes);
+  carregarVozes();
+
+  document.getElementById('bFalar').onclick = function () { falar('Advisory', 1); };
+  document.getElementById('bLento').onclick = function () { falar('Advisory', 0.6); };
+  document.getElementById('bFrase').onclick = function () {
+    falar('The target operating model and the global business services roadmap were approved by compliance during the due diligence.', 1);
+  };
+
+  /* ---------- 2. Gravação ---------- */
+  var rec = null, chunks = [], blobUrl = null, corte = null;
+  var bGravar = document.getElementById('bGravar'), bTocar = document.getElementById('bTocar'), bAB = document.getElementById('bAB');
+  var micStatus = document.getElementById('micStatus');
+  var player = new Audio();
+
+  function pararTrilhas(stream) {
+    stream.getTracks().forEach(function (t) { t.stop(); });
+    log('trilhas do microfone liberadas (indicador do Android deve apagar)', 'ok');
+  }
+
+  bGravar.onclick = function () {
+    if (rec && rec.state === 'recording') { rec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      micStatus.textContent = 'MediaRecorder indisponível'; micStatus.className = 'pill er';
+      log('MediaRecorder ou getUserMedia indisponível (precisa de HTTPS ou localhost)', 'er'); return;
+    }
+    micStatus.textContent = 'pedindo permissão…'; micStatus.className = 'pill';
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var mime = 'audio/webm;codecs=opus';
+      if (!window.MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(mime)) {
+        log('audio/webm;codecs=opus não suportado, usando padrão do navegador');
+        mime = '';
+      }
+      rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunks = [];
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        clearTimeout(corte);
+        pararTrilhas(stream);
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        var blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        blobUrl = URL.createObjectURL(blob);
+        bTocar.disabled = false; bAB.disabled = false;
+        bGravar.textContent = 'Gravar 5 s';
+        micStatus.textContent = 'gravado: ' + Math.round(blob.size / 1024) + ' KB (' + (rec.mimeType || '?') + ')';
+        micStatus.className = 'pill ok';
+        log('gravação pronta: ' + blob.size + ' bytes', 'ok');
+        tocarAB();
+      };
+      rec.start();
+      bGravar.textContent = 'Parar';
+      micStatus.textContent = 'gravando…'; micStatus.className = 'pill';
+      log('gravando (corte automático em 5 s)');
+      corte = setTimeout(function () { if (rec && rec.state === 'recording') rec.stop(); }, 5000);
+    }).catch(function (err) {
+      micStatus.textContent = 'permissão negada'; micStatus.className = 'pill er';
+      log('getUserMedia falhou: ' + err.name + ' — ' + err.message, 'er');
+    });
+  };
+
+  function tocarGravacao() {
+    if (!blobUrl) return;
+    player.src = blobUrl;
+    player.play().then(function () { log('tocando sua gravação'); })
+      .catch(function (e) { log('não consegui tocar a gravação: ' + e.message, 'er'); });
+  }
+  function tocarAB() {
+    if (!escolhida) { tocarGravacao(); return; }
+    synth.cancel();
+    setTimeout(function () {
+      var u = new SpeechSynthesisUtterance('Advisory');
+      u.voice = escolhida; u.lang = escolhida.lang; u.rate = 1;
+      u.onend = function () { setTimeout(tocarGravacao, 350); };
+      u.onerror = function () { tocarGravacao(); };
+      log('A/B: voz do aparelho, depois a sua');
+      synth.speak(u);
+    }, 60);
+  }
+  bTocar.onclick = tocarGravacao;
+  bAB.onclick = tocarAB;
+
+  /* ---------- 3. Reconhecimento ---------- */
+  var netStatus = document.getElementById('netStatus');
+  var recOut = document.getElementById('recOut');
+  var bRec = document.getElementById('bOuvirMe');
+  var SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+
+  function atualizaRede() {
+    if (!SR) { netStatus.textContent = 'reconhecimento indisponível'; netStatus.className = 'pill er'; bRec.style.display = 'none'; return; }
+    if (navigator.onLine) { netStatus.textContent = 'online — reconhecimento disponível'; netStatus.className = 'pill ok'; bRec.style.display = ''; }
+    else { netStatus.textContent = 'offline — botão escondido, é o comportamento correto'; netStatus.className = 'pill'; bRec.style.display = 'none'; }
+  }
+  window.addEventListener('online', atualizaRede);
+  window.addEventListener('offline', atualizaRede);
+  atualizaRede();
+
+  function normaliza(s) { return String(s).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(); }
+
+  bRec.onclick = function () {
+    if (!SR) return;
+    var r = new SR();
+    r.lang = 'en-US'; r.continuous = false; r.interimResults = false; r.maxAlternatives = 3;
+    recOut.style.display = ''; recOut.className = 'pill'; recOut.textContent = 'ouvindo…';
+    log('reconhecimento iniciado');
+    r.onresult = function (ev) {
+      var alts = [];
+      for (var i = 0; i < ev.results[0].length; i++) alts.push(ev.results[0][i].transcript);
+      var acertou = alts.some(function (a) { return normaliza(a) === normaliza('Advisory'); });
+      recOut.textContent = acertou ? 'Entendi "' + alts[0] + '"' : 'Entendi "' + alts[0] + '", tente de novo';
+      recOut.className = acertou ? 'pill ok' : 'pill er';
+      log('alternativas: ' + alts.join(' | '), acertou ? 'ok' : 'er');
+    };
+    r.onerror = function (e) { recOut.textContent = 'erro: ' + e.error; recOut.className = 'pill er'; log('reconhecimento: ' + e.error, 'er'); };
+    r.onend = function () { log('reconhecimento encerrado'); };
+    r.start();
+  };
+
+  log('página carregada — user agent: ' + navigator.userAgent);
+})();
+</script>
+</body>
+</html>

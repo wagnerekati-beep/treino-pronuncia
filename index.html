@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
+<meta name="theme-color" content="#1f4fd8">
+<meta name="description" content="Treino diário de pronúncia de inglês técnico, com foco na sílaba tônica.">
+<title>Treino de Pronúncia</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topo">
+  <h1 id="tituloTela">Hoje</h1>
+  <span class="contador" id="contador"></span>
+</header>
+<div class="barra" aria-hidden="true"><i id="barraProgresso"></i></div>
+
+<!-- ================= HOJE ================= -->
+<main class="tela" id="tela-hoje" aria-labelledby="tituloTela">
+  <div id="avisoGlobal" class="aviso" hidden></div>
+
+  <!-- sem voz em inglês -->
+  <section id="semVoz" hidden>
+    <div class="aviso erro">Este aparelho não tem nenhuma voz em inglês instalada, então o app não consegue falar.</div>
+    <div class="cartao" style="text-align:left">
+      <p class="rotulo">Como instalar, no Android</p>
+      <ol class="passos">
+        <li>Configurações</li>
+        <li>Sistema</li>
+        <li>Idiomas e entrada</li>
+        <li>Saída de texto para voz</li>
+        <li>Google Fala (ou o motor que estiver em uso)</li>
+        <li>Toque na engrenagem ao lado</li>
+        <li>Instalar dados de voz</li>
+        <li>Inglês dos Estados Unidos</li>
+      </ol>
+      <p class="nota" style="margin-top:12px">Depois de instalar, feche e abra o app de novo.</p>
+    </div>
+  </section>
+
+  <!-- sessão concluída -->
+  <section id="fimSessao" hidden>
+    <div class="vazio">
+      <b>Sessão de hoje concluída</b>
+      <p id="resumoSessao"></p>
+    </div>
+    <div class="numeros" id="numerosFim"></div>
+    <button class="btn peq" id="btnTreinarMais" type="button">Treinar mais 10</button>
+  </section>
+
+  <!-- cartão -->
+  <section id="areaCartao">
+    <article class="cartao" id="cartao">
+      <p class="sigla" id="cSigla" hidden></p>
+      <p class="termo" id="cTermo">—</p>
+      <span class="categoria" id="cCategoria"></span>
+
+      <div class="revelado" id="cRevelado" hidden>
+        <div class="bloco">
+          <p class="rotulo">Sílaba tônica</p>
+          <div class="silabas" id="cSilabas"></div>
+          <p class="dica-forte" id="cDicaForte"></p>
+        </div>
+        <div class="bloco">
+          <p class="rotulo">Erro comum do brasileiro</p>
+          <p class="erro-comum"><s id="cErro"></s></p>
+        </div>
+        <div class="bloco">
+          <p class="rotulo">Na frase</p>
+          <p class="frase-en" id="cFraseEn"></p>
+          <p class="frase-pt" id="cFrasePt"></p>
+          <button class="btn peq" id="btnFrase" type="button" style="margin-top:10px;width:100%"><span class="ic" aria-hidden="true">🔊</span> Ouvir a frase</button>
+        </div>
+        <div class="bloco">
+          <p class="rotulo">Observação</p>
+          <p class="nota" id="cNota"></p>
+        </div>
+      </div>
+
+      <div class="estado-gravando" id="estadoGravando" hidden>
+        <span class="ponto" aria-hidden="true"></span>
+        <span id="textoGravando">Gravando… fale agora</span>
+      </div>
+      <div id="avisoCartao" class="aviso" hidden style="margin:14px 0 0"></div>
+    </article>
+  </section>
+</main>
+
+<!-- ações do treino (metade de baixo, alcance do polegar) -->
+<div class="acoes" id="acoes">
+  <div class="linha">
+    <button class="btn pri" id="btnOuvir" type="button" disabled><span class="ic" aria-hidden="true">🔊</span> Ouvir</button>
+    <button class="btn" id="btnDevagar" type="button" disabled><span class="ic" aria-hidden="true">🐢</span> Devagar</button>
+  </div>
+  <div class="linha">
+    <button class="btn" id="btnGravar" type="button"><span class="ic" aria-hidden="true">🎙️</span> Gravar</button>
+    <button class="btn" id="btnConferir" type="button"><span class="ic" aria-hidden="true">👂</span> Conferir</button>
+  </div>
+  <div class="linha">
+    <button class="btn ok" id="btnAcertei" type="button">Acertei</button>
+    <button class="btn rep" id="btnRepetir" type="button">Preciso repetir</button>
+  </div>
+</div>
+
+<!-- ================= TODOS OS TERMOS ================= -->
+<main class="tela" id="tela-todos" hidden>
+  <div class="filtros" id="filtros"></div>
+  <ul class="lista" id="listaTermos"></ul>
+</main>
+
+<!-- ================= PROGRESSO ================= -->
+<main class="tela" id="tela-progresso" hidden>
+  <div class="numeros" id="numeros"></div>
+  <h2 class="sec">Ainda erra</h2>
+  <ul class="lista" id="listaErrados"></ul>
+  <h2 class="sec">Dominados</h2>
+  <ul class="lista" id="listaDominados"></ul>
+  <h2 class="sec">Zerar</h2>
+  <button class="btn peq" id="btnZerar" type="button">Apagar todo o progresso</button>
+</main>
+
+<!-- ================= AJUSTES ================= -->
+<main class="tela" id="tela-ajustes" hidden>
+  <div class="campo">
+    <label for="selVoz">Voz do aparelho</label>
+    <p class="ajuda" id="ajudaVoz">A qualidade muda bastante de uma voz para outra. Teste algumas.</p>
+    <select id="selVoz"></select>
+    <button class="btn peq" id="btnTestarVoz" type="button" style="margin-top:10px">Testar esta voz</button>
+  </div>
+
+  <div class="campo">
+    <label for="rangeLento">Velocidade do modo devagar: <span id="valorLento">0.6</span></label>
+    <p class="ajuda">Mais para a esquerda é mais lento.</p>
+    <input type="range" id="rangeLento" min="0.3" max="0.9" step="0.05" value="0.6">
+  </div>
+
+  <div class="campo">
+    <div class="troca">
+      <span>
+        <label for="chkGravar" style="margin:0">Gravação e comparação A/B</label>
+        <p class="ajuda" style="margin:2px 0 0">Desligue para esconder o botão Gravar.</p>
+      </span>
+      <input type="checkbox" id="chkGravar" checked>
+    </div>
+  </div>
+
+  <div class="campo">
+    <div class="troca">
+      <span>
+        <label for="chkTela" style="margin:0">Manter a tela acesa no treino</label>
+        <p class="ajuda" style="margin:2px 0 0">Evita a tela apagar enquanto você fala.</p>
+      </span>
+      <input type="checkbox" id="chkTela" checked>
+    </div>
+  </div>
+
+  <div class="campo">
+    <label>Instalar como app</label>
+    <p class="ajuda" id="ajudaInstalar">Instala na tela inicial e abre sem a barra do navegador.</p>
+    <button class="btn peq" id="btnInstalar" type="button" hidden>Instalar app</button>
+  </div>
+
+  <div class="campo">
+    <label>Sobre o botão Conferir</label>
+    <p class="ajuda" style="margin:0">O Conferir usa o reconhecimento de fala do Google para dizer se a palavra saiu inteligível. Ele <strong>não</strong> avalia se a sílaba tônica está certa, e não dá nota de sotaque. Para tônica, o critério é a comparação A/B: ouvir a voz do aparelho e a sua em sequência. O Conferir precisa de internet e some quando você está offline.</p>
+  </div>
+
+  <div class="campo">
+    <label>Versão</label>
+    <p class="ajuda" style="margin:0" id="infoVersao"></p>
+  </div>
+</main>
+
+<!-- ================= NAVEGAÇÃO ================= -->
+<nav class="nav" aria-label="Seções">
+  <button type="button" data-tela="hoje" aria-current="page"><span class="ic" aria-hidden="true">🎯</span> Hoje</button>
+  <button type="button" data-tela="todos"><span class="ic" aria-hidden="true">📋</span> Termos</button>
+  <button type="button" data-tela="progresso"><span class="ic" aria-hidden="true">📈</span> Progresso</button>
+  <button type="button" data-tela="ajustes"><span class="ic" aria-hidden="true">⚙️</span> Ajustes</button>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>
