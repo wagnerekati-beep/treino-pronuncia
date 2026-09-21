@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  var VERSAO = '1.0.0';
+  var VERSAO = '1.1.0';
   var TAM_SESSAO = 10;
   var LIMITE_GRAVACAO_MS = 5000;
   var INTERVALOS = { 1: 1, 2: 3, 3: 7 }; // caixa -> dias até voltar
@@ -273,6 +273,7 @@
           if (self.url) { URL.revokeObjectURL(self.url); self.url = null; }
           var blob = new Blob(pedacos, { type: (self.rec && self.rec.mimeType) || 'audio/webm' });
           if (!blob.size) { aoFalhar('Não saiu som. Fale mais perto do microfone.'); return; }
+          self.blob = blob;
           self.url = URL.createObjectURL(blob);
           aoTerminar();
         };
@@ -316,9 +317,174 @@
       this.parar();
       try { this.tocador.pause(); } catch (e) { /* ignora */ }
       if (this.url) { URL.revokeObjectURL(this.url); this.url = null; }
+      this.blob = null;
     },
 
     temGravacao: function () { return !!this.url; }
+  };
+
+  /* =========================================================
+     Análise da força — onde caiu a sílaba tônica na SUA gravação
+
+     Roda inteira no aparelho, com Web Audio. Nenhuma rede, nenhuma API.
+     A ideia: em inglês, a sílaba tônica sai mais forte e mais longa que as
+     vizinhas. Então a gente mede a energia da voz ao longo do tempo, acha os
+     picos (um por sílaba) e vê qual pico ganhou.
+
+     Ela erra quando tem barulho em volta ou quando as sílabas saem grudadas.
+     Por isso, quando o número de picos não bate com o número de sílabas
+     esperadas, ela diz que não conseguiu separar, em vez de chutar.
+     ========================================================= */
+  var Analise = {
+    suportada: !!(window.AudioContext || window.webkitAudioContext),
+    ctx: null,
+    MS_POR_QUADRO: 10,
+
+    // Só vale para palavra única de 2 a 5 sílabas. Em sigla e termo de duas
+    // palavras a separação não é confiável, e resposta errada é pior que nenhuma.
+    cabe: function (termo) {
+      if (!this.suportada || !termo) return false;
+      var n = termo.syllables.length;
+      return n >= 2 && n <= 5 && termo.speak.trim().indexOf(' ') === -1;
+    },
+
+    medir: function (blob, termo) {
+      var self = this;
+      return new Promise(function (resolve) {
+        if (!self.cabe(termo) || !blob) { resolve({ ok: false, motivo: 'nao-cabe' }); return; }
+        try {
+          if (!self.ctx) self.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) { resolve({ ok: false, motivo: 'sem-audio' }); return; }
+
+        blob.arrayBuffer().then(function (buf) {
+          return self.ctx.decodeAudioData(buf);
+        }).then(function (audio) {
+          resolve(self.calcular(audio, termo));
+        }).catch(function () {
+          resolve({ ok: false, motivo: 'sem-audio' });
+        });
+      });
+    },
+
+    calcular: function (audio, termo) {
+      var canal = audio.getChannelData(0);
+      var porQuadro = Math.max(1, Math.round(audio.sampleRate * this.MS_POR_QUADRO / 1000));
+      var env = this.envelope(canal, porQuadro);
+      env = this.suavizar(env, 4); // ~50 ms, apaga a ondulação dentro da vogal
+
+      var pico = 0;
+      for (var i = 0; i < env.length; i++) if (env[i] > pico) pico = env[i];
+      if (pico < 0.012) return { ok: false, motivo: 'baixo' };
+
+      var corte = this.recortar(env, pico * 0.12);
+      if (!corte) return { ok: false, motivo: 'baixo' };
+      var fala = env.subarray(corte[0], corte[1]);
+      if (fala.length * this.MS_POR_QUADRO < 180) return { ok: false, motivo: 'curto' };
+
+      var nucleos = this.nucleos(fala, pico);
+      var esperado = termo.syllables.length;
+      if (nucleos.length !== esperado) {
+        return { ok: false, motivo: 'separacao', achou: nucleos.length, esperado: esperado };
+      }
+
+      // Força de cada sílaba: quanto ela soou alto, com a duração pesando um pouco.
+      var durMedia = 0;
+      nucleos.forEach(function (n) { durMedia += n.dur; });
+      durMedia = durMedia / nucleos.length || 1;
+      var forcas = nucleos.map(function (n) {
+        return n.pico * (0.65 + 0.35 * (n.dur / durMedia));
+      });
+
+      var maior = 0;
+      for (var k = 1; k < forcas.length; k++) if (forcas[k] > forcas[maior]) maior = k;
+
+      var total = forcas.reduce(function (a, b) { return a + b; }, 0) || 1;
+      var relativas = forcas.map(function (f) { return f / total; });
+
+      // Duas sílabas quase empatadas não dão para separar com honestidade.
+      var ordenadas = forcas.slice().sort(function (a, b) { return b - a; });
+      var folga = ordenadas.length > 1 ? (ordenadas[0] - ordenadas[1]) / ordenadas[0] : 1;
+
+      return {
+        ok: true,
+        indice: maior,
+        acertou: maior === termo.stress,
+        empatado: folga < 0.08,
+        relativas: relativas
+      };
+    },
+
+    // Energia (RMS) a cada 10 ms.
+    envelope: function (canal, porQuadro) {
+      var n = Math.floor(canal.length / porQuadro);
+      var env = new Float32Array(n);
+      for (var i = 0; i < n; i++) {
+        var soma = 0, base = i * porQuadro;
+        for (var j = 0; j < porQuadro; j++) { var v = canal[base + j]; soma += v * v; }
+        env[i] = Math.sqrt(soma / porQuadro);
+      }
+      return env;
+    },
+
+    suavizar: function (env, raio) {
+      var saida = new Float32Array(env.length);
+      for (var i = 0; i < env.length; i++) {
+        var soma = 0, conta = 0;
+        for (var j = i - raio; j <= i + raio; j++) {
+          if (j >= 0 && j < env.length) { soma += env[j]; conta++; }
+        }
+        saida[i] = soma / conta;
+      }
+      return saida;
+    },
+
+    // Tira o silêncio do começo e do fim.
+    recortar: function (env, limiar) {
+      var ini = -1, fim = -1;
+      for (var i = 0; i < env.length; i++) { if (env[i] >= limiar) { ini = i; break; } }
+      for (var j = env.length - 1; j >= 0; j--) { if (env[j] >= limiar) { fim = j + 1; break; } }
+      if (ini < 0 || fim <= ini) return null;
+      return [ini, fim];
+    },
+
+    // Um pico por sílaba: máximos locais separados por um vale fundo o bastante.
+    nucleos: function (fala, picoGlobal) {
+      var limiarPico = picoGlobal * 0.22;
+      var candidatos = [];
+      for (var i = 1; i < fala.length - 1; i++) {
+        if (fala[i] >= fala[i - 1] && fala[i] > fala[i + 1] && fala[i] >= limiarPico) {
+          candidatos.push(i);
+        }
+      }
+      if (!candidatos.length) return [];
+
+      var aceitos = [candidatos[0]];
+      for (var c = 1; c < candidatos.length; c++) {
+        var anterior = aceitos[aceitos.length - 1];
+        var atual = candidatos[c];
+        var vale = Infinity;
+        for (var v = anterior; v <= atual; v++) if (fala[v] < vale) vale = fala[v];
+        var menorPico = Math.min(fala[anterior], fala[atual]);
+        if (vale <= menorPico * 0.72) {
+          aceitos.push(atual);                       // vale fundo: sílaba nova
+        } else if (fala[atual] > fala[anterior]) {
+          aceitos[aceitos.length - 1] = atual;       // mesma sílaba, pico melhor
+        }
+      }
+
+      var self = this;
+      return aceitos.map(function (p) {
+        return { pos: p, pico: fala[p], dur: self.largura(fala, p) };
+      });
+    },
+
+    // Quantos quadros a sílaba passa acima da metade do próprio pico.
+    largura: function (fala, p) {
+      var meio = fala[p] * 0.5, e = p, d = p;
+      while (e > 0 && fala[e - 1] >= meio) e--;
+      while (d < fala.length - 1 && fala[d + 1] >= meio) d++;
+      return (d - e + 1);
+    }
   };
 
   /* =========================================================
@@ -404,7 +570,7 @@
   ['tituloTela', 'contador', 'barraProgresso', 'avisoGlobal', 'semVoz', 'fimSessao', 'resumoSessao',
     'numerosFim', 'btnTreinarMais', 'areaCartao', 'cartao', 'cSigla', 'cTermo', 'cCategoria', 'cRevelado',
     'cSilabas', 'cDicaForte', 'cErro', 'cFraseEn', 'cFrasePt', 'btnFrase', 'cNota', 'estadoGravando', 'textoGravando',
-    'avisoCartao', 'acoes', 'btnOuvir', 'btnDevagar', 'btnGravar', 'btnConferir', 'btnAcertei', 'btnRepetir',
+    'avisoCartao', 'analise', 'analiseVeredito', 'analiseBarras', 'analiseRessalva', 'acoes', 'btnOuvir', 'btnDevagar', 'btnGravar', 'btnConferir', 'btnAcertei', 'btnRepetir',
     'filtros', 'listaTermos', 'numeros', 'listaErrados', 'listaDominados', 'btnZerar', 'selVoz', 'ajudaVoz',
     'btnTestarVoz', 'rangeLento', 'valorLento', 'chkGravar', 'chkTela', 'btnInstalar', 'ajudaInstalar',
     'infoVersao'].forEach(function (id) { el[id] = document.getElementById(id); });
@@ -538,6 +704,7 @@
 
       el.cRevelado.hidden = !(modoConsulta || vozFalhou);
       el.estadoGravando.hidden = true;
+      el.analise.hidden = true;
       el.btnGravar.innerHTML = '<span class="ic" aria-hidden="true">🎙️</span> Gravar';
       el.btnGravar.classList.remove('grav');
       UI.aviso('cartao', '');
@@ -570,6 +737,56 @@
       el.cartao.scrollIntoView({ block: 'start' });
       UI.atualizarAcoes();
       UI.atualizarContador();
+    },
+
+    // Mostra onde a força caiu na gravação. Quando a medida não é confiável,
+    // diz isso em vez de inventar um resultado.
+    mostrarAnalise: function (r, t) {
+      el.analiseBarras.innerHTML = '';
+      el.analiseRessalva.textContent = '';
+
+      if (!r.ok) {
+        var recados = {
+          'nao-cabe': 'A análise da força funciona em palavras de uma palavra só, com 2 a 5 sílabas.',
+          'sem-audio': 'Não consegui ler a gravação para analisar.',
+          'baixo': 'O som saiu baixo demais para analisar. Fale mais perto do microfone.',
+          'curto': 'Gravação curta demais para analisar.',
+          'separacao': 'Não consegui separar as sílabas: ouvi ' + r.achou + ' e esperava ' + r.esperado +
+            '. Grave de novo em lugar mais silencioso, falando a palavra sozinha e um pouco mais devagar.'
+        };
+        el.analiseVeredito.textContent = recados[r.motivo] || 'Não consegui analisar desta vez.';
+        el.analiseVeredito.className = 'veredito duvida';
+        el.analise.hidden = false;
+        return;
+      }
+
+      var ouvida = t.syllables[r.indice];
+      var certa = t.syllables[t.stress];
+      if (r.empatado) {
+        el.analiseVeredito.textContent = 'Ficou empatado entre as sílabas. Force mais o ' + certa + '.';
+        el.analiseVeredito.className = 'veredito duvida';
+      } else if (r.acertou) {
+        el.analiseVeredito.textContent = 'A sua força caiu em ' + ouvida + '. É essa mesmo.';
+        el.analiseVeredito.className = 'veredito certo';
+      } else {
+        el.analiseVeredito.textContent = 'A sua força caiu em ' + ouvida + '. Devia cair em ' + certa + '.';
+        el.analiseVeredito.className = 'veredito torto';
+      }
+
+      var maiorRel = Math.max.apply(null, r.relativas) || 1;
+      t.syllables.forEach(function (s, i) {
+        var linha = document.createElement('div');
+        linha.className = 'barra-sil';
+        var venceu = (i === r.indice) && !r.empatado;
+        linha.innerHTML =
+          '<span class="rot' + (i === t.stress ? ' esperada' : '') + '">' + escapar(s) + '</span>' +
+          '<span class="trilho"><span class="nivel' + (venceu ? ' pico' : '') + (venceu && r.acertou ? ' certo' : '') +
+          '" style="width:' + Math.round((r.relativas[i] / maiorRel) * 100) + '%"></span></span>';
+        el.analiseBarras.appendChild(linha);
+      });
+
+      el.analiseRessalva.textContent = 'A sílaba em amarelo é onde a força deveria cair. A medida é da energia da sua voz e pode se confundir com barulho em volta.';
+      el.analise.hidden = false;
     },
 
     revelar: function () {
@@ -772,7 +989,19 @@
       }).then(function (ok) {
         el.estadoGravando.hidden = true;
         if (!ok) UI.aviso('cartao', 'Gravei, mas não consegui tocar o áudio aqui.', 'erro');
-        else UI.aviso('cartao', 'Ouviu a diferença na sílaba forte? Grave de novo se quiser.', '');
+        else UI.aviso('cartao', '');
+        // Logo depois da comparação, mede onde a força caiu. Sem toque nenhum.
+        if (Analise.cabe(t)) {
+          el.analiseVeredito.textContent = 'Analisando…';
+          el.analiseVeredito.className = 'veredito duvida';
+          el.analiseBarras.innerHTML = '';
+          el.analiseRessalva.textContent = '';
+          el.analise.hidden = false;
+        }
+        return Analise.medir(Gravador.blob, t);
+      }).then(function (r) {
+        if (r && r.motivo === 'nao-cabe') { el.analise.hidden = true; return; }
+        UI.mostrarAnalise(r, t);
       });
     }, function (msg) {
       el.btnGravar.innerHTML = '<span class="ic" aria-hidden="true">🎙️</span> Gravar';

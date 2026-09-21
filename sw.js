@@ -1,6 +1,6 @@
 /* Service worker: casca do app + terms.json em cache, estratégia cache-first.
    Troque a VERSAO para publicar uma atualização sem precisar desinstalar o app. */
-var VERSAO = 'pronuncia-v1';
+var VERSAO = 'pronuncia-v2';
 var ARQUIVOS = [
   './',
   './index.html',

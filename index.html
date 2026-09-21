@@ -84,6 +84,13 @@
         <span class="ponto" aria-hidden="true"></span>
         <span id="textoGravando">Gravando… fale agora</span>
       </div>
+      <section class="analise" id="analise" hidden aria-live="polite">
+        <p class="rotulo">Onde caiu a sua força</p>
+        <p class="veredito" id="analiseVeredito"></p>
+        <div class="barras" id="analiseBarras"></div>
+        <p class="ressalva" id="analiseRessalva"></p>
+      </section>
+
       <div id="avisoCartao" class="aviso" hidden style="margin:14px 0 0"></div>
     </article>
   </section>
@@ -164,8 +171,10 @@
   </div>
 
   <div class="campo">
-    <label>Sobre o botão Conferir</label>
-    <p class="ajuda" style="margin:0">O Conferir usa o reconhecimento de fala do Google para dizer se a palavra saiu inteligível. Ele <strong>não</strong> avalia se a sílaba tônica está certa, e não dá nota de sotaque. Para tônica, o critério é a comparação A/B: ouvir a voz do aparelho e a sua em sequência. O Conferir precisa de internet e some quando você está offline.</p>
+    <label>As duas conferências, e o que cada uma faz</label>
+    <p class="ajuda" style="margin:0 0 10px"><strong>Análise da força</strong> — aparece sozinha depois que você grava. Mede a energia da sua voz ao longo da palavra, acha as sílabas e diz em qual delas a força caiu. É isso que responde se você acertou a tônica. Roda dentro do celular, sem internet. Funciona em palavras de uma palavra só, com 2 a 5 sílabas; em siglas e termos de duas palavras ela não aparece. Barulho em volta atrapalha: quando ela não consegue separar as sílabas, ela avisa em vez de chutar.</p>
+    <p class="ajuda" style="margin:0 0 10px"><strong>Conferir</strong> — usa o reconhecimento de fala do Google para dizer se a palavra saiu inteligível. Ele <strong>não</strong> avalia a sílaba tônica e não dá nota de sotaque. Precisa de internet e some quando você está offline.</p>
+    <p class="ajuda" style="margin:0">Nenhuma das duas dá nota de sotaque, e nenhuma substitui o seu ouvido: a comparação A/B, ouvir a voz do aparelho e a sua em sequência, continua sendo o melhor juiz.</p>
   </div>
 
   <div class="campo">

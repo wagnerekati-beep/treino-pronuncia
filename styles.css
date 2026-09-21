@@ -235,6 +235,27 @@ body {
 .aviso.destaque { background: var(--ac-soft); border-color: var(--ac); color: var(--fg); }
 .aviso em { font-style: normal; font-weight: 800; }
 
+/* ---------- análise da força ---------- */
+.analise {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.analise .veredito { font-size: 1rem; font-weight: 700; margin: 0 0 12px; }
+.analise .veredito.certo { color: var(--ok); }
+.analise .veredito.torto { color: var(--er); }
+.analise .veredito.duvida { color: var(--fg-mut); }
+.barras { display: grid; gap: 6px; }
+.barra-sil { display: grid; grid-template-columns: minmax(48px, auto) 1fr; align-items: center; gap: 10px; }
+.barra-sil .rot { font-weight: 700; font-size: .95rem; text-align: right; color: var(--fg-mut); }
+.barra-sil .rot.esperada { color: var(--stress-fg); background: var(--stress-bg); border-radius: 6px; padding: 1px 6px; }
+.barra-sil .trilho { display: block; background: var(--bg-2); border-radius: 999px; height: 16px; overflow: hidden; }
+.barra-sil .nivel { display: block; height: 100%; background: var(--ac); border-radius: 999px; min-width: 3px; }
+.barra-sil .nivel.pico { background: var(--er); }
+.barra-sil .nivel.pico.certo { background: var(--ok); }
+.analise .ressalva { font-size: .82rem; color: var(--fg-mut); margin: 12px 0 0; }
+
 .estado-gravando {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   font-weight: 700; color: var(--er); margin-top: 12px;
