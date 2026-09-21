@@ -47,19 +47,22 @@ A tela **Hoje** monta uma sessão de 10 cartões por dia, priorizando o que voc�
 3. **Devagar** — repete mais lento. A velocidade se ajusta em Ajustes.
 4. Aí aparecem a sílaba tônica destacada, o erro comum do brasileiro e a frase de exemplo.
 5. **Ouvir a frase** — fala a frase de exemplo em inglês.
-6. **Gravar** — grava você falando (5 segundos no máximo) e toca sozinho: primeiro o celular, depois você. É a comparação que mostra se a força caiu na sílaba certa.
-7. **Conferir** — opcional. Confere se a palavra saiu inteligível.
-8. **Acertei** ou **Preciso repetir** — é o que alimenta a repetição.
+6. **Gravar** — grava você falando (5 segundos no máximo) e toca sozinho: primeiro o celular, depois você.
+7. Logo em seguida, sem tocar em nada, aparece **Onde caiu a sua força**: uma barra por sílaba e a frase dizendo em qual delas a sua força caiu. A sílaba em amarelo é onde ela deveria cair.
+8. **Conferir** — opcional. Confere se a palavra saiu inteligível.
+9. **Acertei** ou **Preciso repetir** — é o que alimenta a repetição.
 
 As outras telas: **Termos** é a lista completa, filtrável, para consultar antes de uma reunião. **Progresso** mostra o que você domina e o que ainda erra. **Ajustes** tem voz, velocidade e instalação.
 
-### O que o Conferir faz e o que não faz
+### As duas conferências, e o limite de cada uma
 
-O **Conferir** diz se a palavra saiu inteligível para o reconhecimento de fala do Google. Ele **não** avalia se a sílaba tônica está certa e não dá nota de sotaque.
+**Análise da força** responde a pergunta central do app: a força caiu na sílaba certa? Ela aparece sozinha depois da gravação, mede a energia da sua voz ao longo da palavra, separa as sílabas pelos picos e diz em qual delas a força caiu. Roda dentro do celular, com Web Audio: sem internet, sem API, sem chave.
 
-Para tônica, o critério é a comparação A/B do botão **Gravar**: ouvir a voz do celular e a sua em sequência.
+O que ela não faz: não funciona em sigla nem em termo de duas palavras, e só entra em palavras de 2 a 5 sílabas — fora disso a separação não é confiável e ela nem aparece. Barulho em volta atrapalha. Quando o número de picos não bate com o número de sílabas, quando o som sai baixo demais ou quando duas sílabas empatam, ela diz isso em vez de chutar.
 
-O Conferir precisa de internet. Quando você está offline, o botão simplesmente não aparece — o resto do app continua funcionando normalmente, inclusive o áudio.
+**Conferir** diz se a palavra saiu inteligível para o reconhecimento de fala do Google. Ele **não** avalia a sílaba tônica e não dá nota de sotaque. Precisa de internet: quando você está offline, o botão simplesmente não aparece, e o resto do app continua funcionando, inclusive o áudio e a análise da força.
+
+Nenhuma das duas dá nota de sotaque. A comparação A/B — ouvir a voz do celular e a sua em sequência — continua sendo o melhor juiz.
 
 ---
 
